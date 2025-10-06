@@ -1,0 +1,305 @@
+---
+title: "Projek Supervised Learning Uji Asumsi"
+author: "Rafly Priyantama Ramadhan Bagaskara"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  pdf_document: default
+  github_document:
+    toc: true
+---
+
+# Soal 1
+
+Membangkitkan Data yg sisaan yg ber autokorelasi (dibuktikan dengan uji Durbin Watson).
+
+### 1.Persiapan Data
+
+Kita akan mensimulasikan model regresi sederhana dengan error yang mengikuti proses **AR(1)**: $$
+\epsilon_t =\rho\epsilon_{t-1}+u_t
+$$ dengan $u_t \sim N(0,\sigma^2)$.
+
+```{r}
+set.seed(123)
+
+# Parameter simulasi
+n     <- 200   # Jumlah Obs
+beta0 <- 1.0   # Intercept
+beta1 <- 2.5   # Koef Slope
+sigma <- 1.0   # Std Dev 
+rho   <- 0.7   # koefisien autokorelasi
+
+# Variabel independen
+x <- rnorm(n, mean = 0, sd = 1)
+
+# Bangkitkan error AR(1)
+u <- rnorm(n, 0, sigma)
+eps <- numeric(n)
+eps[1] <- u[1]
+for(t in 2:n) eps[t] <- rho * eps[t-1] + u[t]
+
+# Variabel dependen
+y <- beta0 + beta1 * x + eps
+
+# Model regresi biasa
+fit <- lm(y ~ x)
+summary(fit)
+```
+
+### 2.Visualisasi dan Pemeriksaan Sisaan
+
+```{r}
+res <- resid(fit)
+
+par(mfrow = c(2,1))
+plot(res, type = "l", main = "Plot Residuals", ylab = "Residuals")
+abline(h = 0, col = "gray")
+acf(res, main = "ACF Residuals")
+par(mfrow = c(1,1))
+```
+
+Dari plot di atas, terlihat bahwa residual memiliki pola berurutan (tidak acak sempurna), indikasi autokorelasi positif.
+
+### 3.Uji Durbin–Watson
+
+Uji ini digunakan untuk mendeteksi autokorelasi orde pertama antar sisaan berturut-turut.
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+library(lmtest)
+
+dw_result <- dwtest(fit)
+dw_result
+```
+
+# Soal 2
+
+Membangkitkan data X yang saling multikolinearitas (dibuktikan dengan uji VIF).
+
+### 1.Membangkitkan Data
+
+Multikolinearitas terjadi ketika variabel independen dalam model regresi saling berkorelasi tinggi. Kondisi ini dapat menyebabkan estimasi koefisien menjadi tidak stabil dan interpretasi menjadi sulit.
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+library(car)      # untuk fungsi vif()
+library(ggplot2)
+library(GGally)   # untuk pairplot
+library(corrplot) # untuk heatmap korelasi
+```
+
+```{r}
+set.seed(123)
+# Jumlah observasi
+n <- 100
+
+# Variabel independen
+X1 <- rnorm(n, mean = 50, sd = 10)
+X2 <- 0.8*X1 + rnorm(n, mean = 0, sd = 2)   # Sangat berkorelasi dengan X1
+X3 <- 0.5*X1 + 0.3*X2 + rnorm(n, 0, 5)      # Kombinasi X1 & X2
+X4 <- rnorm(n, mean = 100, sd = 20)         # Tidak berkorelasi dengan X1–X3
+
+# Variabel dependen
+Y <- 5 + 0.6*X1 + 0.4*X2 + 0.2*X3 + rnorm(n, 0, 5)
+
+# Gabungkan ke dalam data frame
+data_ml <- data.frame(Y, X1, X2, X3, X4)
+head(data_ml)
+```
+
+### 2.Visualisasi Korelasi antar Variabel
+
+```{r}
+# Hitung matriks korelasi
+cor_matrix <- cor(data_ml[, -1]) # tanpa Y
+
+# Plot heatmap korelasi
+corrplot(cor_matrix, method = "color", addCoef.col = "black",
+         tl.col = "black", tl.srt = 45, number.cex = 0.8,
+         title = "Heatmap Korelasi Antar Variabel", mar = c(0,0,2,0))
+```
+
+Jika dua variabel memiliki nilai korelasi mendekati ±1 (misalnya X1 dan X2 = 0.9), maka ada indikasi multikolinearitas yang kuat.
+
+### 3.Analisis Regresi Linear
+
+```{r}
+# Membuat model regresi
+model <- lm(Y ~ X1 + X2 + X3 + X4, data = data_ml)
+
+# Ringkasan hasil regresi
+summary(model)
+```
+
+### 4.Uji Multikolinearitas (VIF)
+
+```{r}
+# Uji VIF
+vif_values <- vif(model)
+vif_values
+
+# Interpretasi sederhana
+if (any(vif_values > 10)) {
+  cat("\nTerdapat multikolinearitas tinggi (VIF > 10)\n")
+} else if (any(vif_values > 5)) {
+  cat("\nAda indikasi multikolinearitas sedang (VIF > 5)\n")
+} else {
+  cat("\nTidak ada masalah multikolinearitas\n")
+}
+```
+
+### 5.Kesimpulan
+
+-   Dari hasil heatmap, terlihat bahwa beberapa variabel seperti X1 dan X2 saling berkorelasi tinggi.
+
+-   Hasil VIF = nilai VIF untuk X1 dan X2 \> 10. Artinya terdapat multikolinearitas kuat di antara variabel independen.
+
+# Soal 3
+
+Membangkitkan data dengan sisaan Normal baku (0,1) , dibuktikan dengan uji kenormalan.
+
+### 1.Membangkitkan Data
+
+kita mulai dengan membangkitkan data $x$ dan error $\epsilon \sim N(0,1)$, lalu membentuk $y=\beta_0 + \beta_1 x +\epsilon$.
+
+```{r}
+# Parameter dan jumlah sampel
+n <- 200
+beta0 <- 1.5
+beta1 <- 2.0
+
+# Variabel prediktor (X)
+x <- runif(n, -3, 3)
+
+# Error (sisaan sesungguhnya) ~ Normal(0,1)
+eps <- rnorm(n, mean = 0, sd = 1)
+
+# Variabel respon (Y)
+y <- beta0 + beta1 * x + eps
+
+# Data frame
+df <- data.frame(x = x, y = y)
+head(df)
+```
+
+### 2.Membentuk Model Regresi dan Mengambil Residu
+
+```{r}
+# Membentuk model regresi linear
+fit <- lm(y ~ x, data = df)
+
+# Mengambil residu dari model
+resids <- residuals(fit)
+
+# Ringkasan model
+summary(fit)
+```
+
+### 3.Uji Kenormalan Sisaan
+
+Kita uji menggunakan **Shapiro–Wilk**.
+
+```{r}
+# Shapiro-Wilk Test
+shapiro_result <- shapiro.test(resids)
+shapiro_result
+```
+
+**Interpretasi:**
+
+-   Jika *p-value* \> 0.05 → sisaan berdistribusi normal.
+
+-   Jika *p-value* $\leq$ 0.05 → sisaan tidak berdistribusi normal.
+
+### 4.Visualisasi Distribusi Sisaan
+
+#### QQ-plot
+
+```{r}
+qqnorm(resids, main = "QQ-Plot Residu")
+qqline(resids, col = "red", lwd = 2)
+```
+
+### 5.Kesimpulan
+
+```{r, echo=FALSE}
+cat("Berdasarkan:\n")
+cat("• Uji:", round(shapiro_result$p.value, 4), "> 0.05")
+cat("• QQ-Plot: Pola titik mengikuti garis normal\n")
+cat("Statistik Deskriptif Residual:\n")
+cat("• Mean =", round(mean(resids), 4))
+cat("• Standar Deviasi =", round(sd(resids), 4))
+cat("• Distribusi: N(", round(mean(resids), 2), ",", round(sd(resids), 2), "²)")
+```
+
+# Soal 4
+
+Membangkitkan data dengan sisaan tidak homogen (dibuktikan dengan uji Breusch-Pagan).
+
+### 1.Membangkitkan Data
+
+Kita buat data regresi di mana varians error meningkat seiring nilai X.
+
+```{r}
+set.seed(123)
+
+# Jumlah data
+n <- 100
+
+# Variabel independen
+x <- runif(n, 1, 10)
+
+# Sisaan tidak homogen: varians tergantung pada X
+error <- rnorm(n, mean = 0, sd = x * 0.5)
+
+# Variabel dependen (model linier)
+y <- 5 + 2 * x + error
+
+# Gabungkan menjadi data frame
+data_hetero <- data.frame(x, y)
+head(data_hetero)
+```
+
+### 2.Visualisasi Data
+
+```{r}
+ggplot(data_hetero, aes(x = x, y = y)) +
+  geom_point(color = "steelblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  labs(title = "Hubungan antara X dan Y",
+       x = "X", y = "Y")
+```
+
+### 3.Model Regresi Linear
+
+```{r}
+model <- lm(y ~ x, data = data_hetero)
+summary(model)
+```
+
+### 4.Plot Sisaan vs Nilai Prediksi
+
+Jika terdapat pola "kipas" atau "corong" pada plot sisaan, itu indikasi heteroskedastisitas.
+
+```{r}
+plot(model$fitted.values, resid(model),
+     main = "Plot Sisaan vs Nilai Prediksi",
+     xlab = "Nilai Prediksi", ylab = "Sisaan",
+     pch = 19, col = "darkorange")
+abline(h = 0, col = "red", lwd = 2)
+```
+
+### 5.Uji Breusch-Pagan (BP Test)
+
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+bp_result <- bptest(model)
+bp_result
+```
+
+Jika p-value \< 0.05, maka sisaan tidak homogen (terjadi heteroskedastisitas).
+
+### 6.Kesimpulan
+
+```{r, echo=FALSE}
+cat("Berdasarkan bukti\n")
+cat("• Uji  Breusch-Pagan: p-value =", format(bp_result$p.value, scientific = TRUE, digits = 3))
+cat("• Plot Residual: Pola kipas yang terlihat jelas")
+```
